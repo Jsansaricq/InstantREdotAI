@@ -154,10 +154,14 @@ def create_pdf(text, filepath, client_name, document_type, watermark=False):
         content.append(Spacer(1, 20))
 
     paragraphs = text.split('\n')
-    for para in paragraphs:
-        if para.strip():
-            content.append(Paragraph(para, normal_style))
+for para in paragraphs:
+    if para.strip():
+        try:
+            safe_para = para.encode('utf-8').decode('utf-8')
+            content.append(Paragraph(safe_para, normal_style))
             content.append(Spacer(1, 6))
+        except Exception as e:
+            print(f"Encoding error: {e}")
 
     doc.build(content)
 
