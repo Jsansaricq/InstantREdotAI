@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Processing Payment - InstantLegal AI</title>
+    <link rel="shortcut icon" href="{{ url_for('static', filename='favicon.ico') }}">
+    <script src="https://js.stripe.com/v3/"></script>
+    <style>
+        :root {
+            --primary: #2563eb;
+            --primary-dark: #1d4ed8;
+            --secondary: #0ea5e9;
+            --dark: #0f172a;
+            --light: #f8fafc;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --gray: #64748b;
+            --gray-light: #e2e8f0;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, sans-serif;
+        }
+        
+        body {
+            background-color: var(--light);
+            color: var(--dark);
+            line-height: 1.6;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 600px;
+            width: 100%;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .logo {
+            font-size: 22px;
+            font-weight: 700;
+            color: var(--dark);
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        
+        .logo span {
+            color: var(--primary);
+        }
+        
+        h1 {
+            font-size: 24px;
+            margin-bottom: 20px;
+            color: var(--dark);
+        }
+        
+        .loading-icon {
+            font-size: 60px;
+            margin-bottom: 20px;
+            display: inline-block;
+            animation: bounce 2s ease infinite;
+        }
+        
+        @keyframes bounce {
+            0%, 20%, 50%, 80%, 100% {transform: translateY(0);}
+            40% {transform: translateY(-20px);}
+            60% {transform: translateY(-10px);}
+        }
+        
+        .loading-progress {
+            width: 100%;
+            height: 6px;
+            background: rgba(0, 0, 0, 0.1);
+            border-radius: 3px;
+            margin: 20px 0;
+            overflow: hidden;
+            position: relative;
+        }
+        
+        .loading-progress-bar {
+            position: absolute;
+            top: 0;
+            left: 0;
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(to right, var(--primary), var(--secondary));
+            border-radius: 3px;
+            transition: width 0.5s ease;
+        }
+        
+        .loading-catchphrase {
+            font-size: 18px;
+            font-style: italic;
+            margin: 20px 0;
+            min-height: 54px;
+        }
+        
+        .loading-time {
+            font-size: 14px;
+            opacity: 0.7;
+            margin-bottom: 20px;
+        }
+        
+        .success-message {
+            background: rgba(16, 185, 129, 0.1);
+            border: 1px solid var(--success);
+            color: var(--success);
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            display: none;
+        }
+        
+        .error-message {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid var(--danger);
+            color: var(--danger);
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            display: none;
+        }
+        
+        .btn {
+            background: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            padding: 12px 20px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
+            margin-top: 20px;
+        }
+        
+        .btn:hover {
+            background: var(--primary-dark);
+            transform: translateY(-2px);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <a href="/" class="logo">Instant<span>Legal</span>AI</a>
+        
+        <div class="loading-icon">⚖️</div>
+        <h1>Processing Your Payment</h1>
+        
+        <div class="loading-progress">
+            <div class="loading-progress-bar" id="progress-bar"></div>
+        </div>
+        
+        <div class="loading-catchphrase" id="catchphrase">
+            "Verifying payment and preparing your document..."
+        </div>
+        
+        <p class="loading-time">This may take up to 2 minutes. Thank you for your patience!</p>
+        
+        <div class="success-message" id="success-message">
+            Your document has been generated successfully! <a href="#" id="download-link">Click here to download</a>
+        </div>
+        
+        <div class="error-message" id="error-message">
+            There was an error generating your document. Please try again.
+        </div>
+        
+        <a href="/" class="btn" id="return-home" style="display: none;">Return to Home</a>
+    </div>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const progressBar = document.getElementById('progress-bar');
+            const catchphraseElement = document.getElementById('catchphrase');
+            const successMessage = document.getElementById('success-message');
+            const errorMessage = document.getElementById('error-message');
+            const downloadLink = document.getElementById('download-link');
+            const returnHomeButton = document.getElementById('return-home');
+            
+            // Initialize Stripe
+            const stripe = Stripe('{{ stripe_key }}');
+            
+            // Get session ID from URL
+            const sessionId = '{{ session_id }}';
+            
+            // Array of funny legal catchphrases
+            const catchphrases = [
+                "Turning legal jargon into plain English...",
+                "Objection overruled! Your document is being prepared...",
+                "Briefing the AI judge on your requirements...",
+                "Citing precedents and adding legal pizzazz...",
+                "Examining the fine print so you don't have to...",
+                "Translating legalese into something actually readable...",
+                "Preparing to make opposing counsel jealous...",
+                "Dotting the i's, crossing the t's, and adding some legal flair...",
+                "Summoning the ghost of legal documents past...",
+                "Arguing with the AI about comma placement...",
+                "Deliberating on the perfect legal tone...",
+                "Calling expert witnesses to verify your document...",
+                "Striking hearsay from the record...",
+                "Preparing closing arguments for your document...",
+                "Instructing the jury of AI models on your case..."
+            ];
+            
+            // Array of legal-themed emojis
+            const legalEmojis = [
+                "⚖️", // scales of justice
+                "📜", // scroll
+                "📝", // memo
+                "🧑‍⚖️", // judge
+                "👨‍💼", // person in suit
+                "🔍", // magnifying glass
+                "📋", // clipboard
+                "🗂️", // card index dividers
+                "📊", // bar chart
+                "🏛️", // classical building
+                "🤝", // handshake
+                "📁", // file folder
+                "🗄️", // file cabinet
+                "📔", // notebook with decorative cover
+                "🖋️"  // fountain pen
+            ];
+            
+            const iconElement = document.querySelector('.loading-icon');
+            
+            // Function to update the loading animation
+            function updateLoadingAnimation(startTime) {
+                const currentTime = new Date().getTime();
+                const elapsedTime = (currentTime - startTime) / 1000; // in seconds
+                const totalTime = 120; // 2 minutes in seconds
+                
+                // Update progress bar (capped at 95% until complete)
+                const progress = Math.min(95, (elapsedTime / totalTime) * 100);
+                progressBar.style.width = `${progress}%`;
+                
+                // Update catchphrase every 5 seconds
+                if (Math.floor(elapsedTime) % 5 === 0) {
+                    const randomCatchphraseIndex = Math.floor(Math.random() * catchphrases.length);
+                    catchphraseElement.innerHTML = `"${catchphrases[randomCatchphraseIndex]}"`;
+                    
+                    const randomEmojiIndex = Math.floor(Math.random() * legalEmojis.length);
+                    iconElement.textContent = legalEmojis[randomEmojiIndex];
+                }
+                
+                return setTimeout(() => updateLoadingAnimation(startTime), 1000);
+            }
+            
+            // Start the loading animation
+            const startTime = new Date().getTime();
+            const animationTimer = updateLoadingAnimation(startTime);
+            
+            // Function to check payment status with retry logic
+            function checkPaymentStatus(sessionId, retryCount = 0, maxRetries = 3) {
+                fetch(`/payment-success?session_id=${sessionId}`)
+                    .then(response => {
+                        if (!response.ok) {
+                            // Handle 503 Service Unavailable specifically
+                            if (response.status === 503 && retryCount < maxRetries) {
+                                console.log(`Server unavailable (503), retry ${retryCount + 1}/${maxRetries} in ${(retryCount + 1) * 2} seconds`);
+                                
+                                // Update the catchphrase to indicate retrying
+                                catchphraseElement.innerHTML = `"Server is busy, retrying in ${(retryCount + 1) * 2} seconds..."`;
+                                
+                                // Retry after exponential backoff
+                                setTimeout(() => {
+                                    checkPaymentStatus(sessionId, retryCount + 1, maxRetries);
+                                }, (retryCount + 1) * 2000);
+                                return;
+                            }
+                            
+                            // Check content type to handle HTML responses
+                            const contentType = response.headers.get('content-type');
+                            if (contentType && contentType.includes('text/html')) {
+                                throw new Error(`Server returned HTML instead of JSON (status: ${response.status}). The server might be overloaded.`);
+                            }
+                            
+                            return response.json().then(errorData => {
+                                throw new Error(errorData.error || `Server error: ${response.status}`);
+                            }).catch(err => {
+                                if (err.message && err.message !== "Unexpected end of JSON input" && !err.message.includes("Unexpected token")) {
+                                    throw err;
+                                }
+                                throw new Error(`Server error: ${response.status}. The server might be overloaded.`);
+                            });
+                        }
+                        
+                        // Check content type to handle HTML responses
+                        const contentType = response.headers.get('content-type');
+                        if (contentType && contentType.includes('text/html')) {
+                            throw new Error(`Server returned HTML instead of JSON. The server might be overloaded.`);
+                        }
+                        
+                        return response.json().catch(err => {
+                            console.error("JSON parsing error:", err);
+                            throw new Error("Failed to parse server response. The server might be overloaded.");
+                        });
+                    })
+                    .then(data => {
+                        clearTimeout(animationTimer);
+                        progressBar.style.width = '100%';
+                        
+                        setTimeout(() => {
+                            if (data.success) {
+                                successMessage.style.display = 'block';
+                                
+                                downloadLink.href = data.download_url;
+                                
+                                const autoDownloadLink = document.createElement('a');
+                                autoDownloadLink.href = data.download_url;
+                                autoDownloadLink.download = data.download_url.split('/').pop();
+                                document.body.appendChild(autoDownloadLink);
+                                autoDownloadLink.click();
+                                document.body.removeChild(autoDownloadLink);
+                                
+                                returnHomeButton.style.display = 'inline-block';
+                            } else if (data.status === 'processing') {
+                                // Handle processing status - retry after a delay
+                                console.log("Document still processing, will retry in 5 seconds");
+                                catchphraseElement.innerHTML = `"${data.message || 'Your document is still being generated. Please wait a moment...'}"`;
+                                
+                                // Reset progress bar to show continued processing
+                                progressBar.style.width = '75%';
+                                
+                                // Retry after 5 seconds
+                                setTimeout(() => {
+                                    checkPaymentStatus(sessionId);
+                                }, 5000);
+                            } else {
+                                errorMessage.textContent = data.error || 'There was an error generating your document. Please try again.';
+                                errorMessage.style.display = 'block';
+                                returnHomeButton.style.display = 'inline-block';
+                            }
+                        }, 500);
+                    })
+                    .catch(function(error) {
+                        // If we've reached max retries and still getting errors
+                        if (error.message && error.message.includes('503') && retryCount < maxRetries) {
+                            console.log(`503 error in response, retry ${retryCount + 1}/${maxRetries} in ${(retryCount + 1) * 2} seconds`);
+                            
+                            // Update the catchphrase to indicate retrying
+                            catchphraseElement.innerHTML = `"Server is busy, retrying in ${(retryCount + 1) * 2} seconds..."`;
+                            
+                            // Retry after exponential backoff
+                            setTimeout(() => {
+                                checkPaymentStatus(sessionId, retryCount + 1, maxRetries);
+                            }, (retryCount + 1) * 2000);
+                            return;
+                        }
+                        
+                        // Handle errors
+                        clearTimeout(animationTimer);
+                        progressBar.style.width = '100%';
+                        
+                        console.error('Payment processing error:', error);
+                        errorMessage.textContent = 'There was an error processing your payment: ' + error.message;
+                        errorMessage.style.display = 'block';
+                        returnHomeButton.style.display = 'inline-block';
+                    });
+            }
+            
+            // Start checking payment status
+            checkPaymentStatus(sessionId);
+        });
+    </script>
+</body>
+</html> 
