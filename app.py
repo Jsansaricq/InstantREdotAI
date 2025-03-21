@@ -136,12 +136,33 @@ Include all required legal disclosures and a signature section for both buyer an
         return jsonify({'error': f'Failed to generate document: {str(e)}'}), 500
 
 def create_pdf(text, filepath, client_name, document_type, watermark=False):
-    """ Generates a PDF document with an optional watermark. """
-    doc = SimpleDocTemplate(filepath, pagesize=letter)
+    """Generates a PDF document with optional watermark using UTF-8-safe encoding."""
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.ttfonts import TTFont
+    from reportlab.pdfbase.cidfonts import UnicodeCIDFont
+
+    # Register a Unicode font (like Helvetica or Arial Unicode)
+    pdfmetrics.registerFont(UnicodeCIDFont('STSong-Light'))  # Works for multi-language
     styles = getSampleStyleSheet()
 
-    title_style = ParagraphStyle('Title', parent=styles['Heading1'], fontSize=16, alignment=TA_CENTER, textColor=colors.navy)
-    normal_style = ParagraphStyle('Normal', parent=styles['Normal'], fontSize=11, alignment=TA_JUSTIFY, leading=14)
+    title_style = ParagraphStyle(
+        'Title',
+        parent=styles['Heading1'],
+        fontSize=16,
+        alignment=TA_CENTER,
+        textColor=colors.navy,
+        fontName='STSong-Light'
+    )
+    normal_style = ParagraphStyle(
+        'Normal',
+        parent=styles['Normal'],
+        fontSize=11,
+        alignment=TA_JUSTIFY,
+        leading=14,
+        fontName='STSong-Light'
+    )
+
+    doc = SimpleDocTemplate(filepath, pagesize=letter)
 
     content = [Paragraph(f"{document_type.upper()}", title_style), Spacer(1, 20)]
     content.append(Paragraph(f"Prepared for: {client_name}", title_style))
@@ -153,15 +174,13 @@ def create_pdf(text, filepath, client_name, document_type, watermark=False):
         content.append(Paragraph("<font color='red'>WATERMARKED PREVIEW</font>", title_style))
         content.append(Spacer(1, 20))
 
+    # Ensure text is split and safely encoded
     paragraphs = text.split('\n')
-for para in paragraphs:
-    if para.strip():
-        try:
-            safe_para = para.encode('utf-8').decode('utf-8')
+    for para in paragraphs:
+        if para.strip():
+            safe_para = para.encode('utf-8', 'ignore').decode('utf-8')
             content.append(Paragraph(safe_para, normal_style))
             content.append(Spacer(1, 6))
-        except Exception as e:
-            print(f"Encoding error: {e}")
 
     doc.build(content)
 
